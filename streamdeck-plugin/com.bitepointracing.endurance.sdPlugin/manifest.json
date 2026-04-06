@@ -1,0 +1,113 @@
+{
+  "Name": "BPR Endurance Tool",
+  "Description": "Control the Bite Point Racing Endurance Tool dashboard from your Stream Deck",
+  "Version": "1.0.0",
+  "Author": "Bite Point Racing",
+  "Category": "BPR Racing",
+  "CategoryIcon": "imgs/category-icon",
+  "Icon": "imgs/plugin-icon",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.5"
+  },
+  "OS": [
+    { "Platform": "windows", "MinimumVersion": "10" },
+    { "Platform": "mac", "MinimumVersion": "12" }
+  ],
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "Actions": [
+    {
+      "UUID": "com.bitepointracing.switch-page",
+      "Name": "Switch Page",
+      "Tooltip": "Navigate to a BPR dashboard page",
+      "Icon": "imgs/actions/switch-page",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/switch-page",
+          "TitleAlignment": "bottom",
+          "FontSize": "12"
+        }
+      ],
+      "PropertyInspectorPath": "ui/switch-page-pi.html",
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.bitepointracing.toggle-action",
+      "Name": "Quick Action",
+      "Tooltip": "Toggle ghost line, fullscreen, or other actions",
+      "Icon": "imgs/actions/switch-page",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/switch-page",
+          "TitleAlignment": "bottom",
+          "FontSize": "12"
+        }
+      ],
+      "PropertyInspectorPath": "ui/toggle-action-pi.html",
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "com.bitepointracing.zoom-telemetry",
+      "Name": "BPR Zoom Telemetry",
+      "Tooltip": "Rotate to zoom in/out on telemetry graphs",
+      "Icon": "imgs/actions/zoom-dial",
+      "Controllers": ["Encoder"],
+      "States": [
+        {
+          "Image": "imgs/actions/zoom-dial"
+        }
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Zoom in/out",
+          "Push": "Reset zoom"
+        }
+      }
+    },
+    {
+      "UUID": "com.bitepointracing.scroll-page",
+      "Name": "BPR Scroll Page",
+      "Tooltip": "Rotate to scroll the page up/down",
+      "Icon": "imgs/actions/zoom-dial",
+      "Controllers": ["Encoder"],
+      "States": [
+        {
+          "Image": "imgs/actions/zoom-dial"
+        }
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Scroll up/down",
+          "Push": "Scroll to top"
+        }
+      }
+    },
+    {
+      "UUID": "com.bitepointracing.team-switcher",
+      "Name": "BPR Switch Team",
+      "Tooltip": "Rotate to cycle teams, press to confirm",
+      "Icon": "imgs/actions/zoom-dial",
+      "Controllers": ["Encoder"],
+      "States": [
+        {
+          "Image": "imgs/actions/zoom-dial"
+        }
+      ],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Cycle teams",
+          "Push": "Confirm team"
+        }
+      }
+    }
+  ]
+}

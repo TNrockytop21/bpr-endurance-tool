@@ -1,0 +1,12 @@
+BPR Endurance Tool
+Copyright (c) 2026 Bite Point Racing
+
+This software is provided for use by Bite Point Racing team members.
+
+By installing this software you agree to the following:
+- This tool reads telemetry data from iRacing via the official shared memory API
+- It does NOT modify any game files or processes
+- Telemetry data is transmitted to the BPR team server for live monitoring
+- No personal data is collected beyond your iRacing display name
+
+For support, contact your team administrator.

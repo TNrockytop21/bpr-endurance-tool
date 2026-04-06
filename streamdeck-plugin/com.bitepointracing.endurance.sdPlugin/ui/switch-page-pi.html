@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Switch Page</title>
+  <style>
+    body { background: #2d2d2d; color: #d8d8d8; font-family: -apple-system, sans-serif; font-size: 12px; padding: 12px; margin: 0; }
+    .sdpi-item { display: flex; align-items: center; margin: 8px 0; }
+    .sdpi-item-label { width: 80px; color: #9a9a9a; }
+    select, input { background: #3b3b3b; border: 1px solid #555; color: #d8d8d8; padding: 6px 8px; border-radius: 4px; width: 200px; }
+    h2 { font-size: 13px; color: #ccc; margin: 0 0 12px; border-bottom: 1px solid #444; padding-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h2>BPR - Switch Page</h2>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Page</div>
+    <select id="page">
+      <option value="/">Live</option>
+      <option value="/fuel">Fuel</option>
+      <option value="/stints">Stints</option>
+      <option value="/standings">Standings</option>
+      <option value="/grid">Grid</option>
+      <option value="/compare">Compare</option>
+      <option value="/coaching">Coaching</option>
+    </select>
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Server</div>
+    <input type="text" id="serverUrl" placeholder="http://45.55.216.21">
+  </div>
+
+  <script>
+    let websocket = null;
+    let uuid = null;
+    let actionInfo = null;
+
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      uuid = inUUID;
+      actionInfo = JSON.parse(inActionInfo);
+
+      websocket = new WebSocket('ws://127.0.0.1:' + inPort);
+      websocket.onopen = function() {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        websocket.send(JSON.stringify({ event: 'getSettings', context: inUUID }));
+        websocket.send(JSON.stringify({ event: 'getGlobalSettings', context: inUUID }));
+      };
+
+      websocket.onmessage = function(evt) {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === 'didReceiveSettings' && msg.payload?.settings) {
+          document.getElementById('page').value = msg.payload.settings.page || '/';
+        }
+        if (msg.event === 'didReceiveGlobalSettings' && msg.payload?.settings) {
+          document.getElementById('serverUrl').value = msg.payload.settings.serverUrl || 'http://45.55.216.21';
+        }
+      };
+    }
+
+    document.getElementById('page').addEventListener('change', function() {
+      if (websocket) {
+        websocket.send(JSON.stringify({
+          event: 'setSettings',
+          context: uuid,
+          payload: { page: this.value }
+        }));
+      }
+    });
+
+    document.getElementById('serverUrl').addEventListener('change', function() {
+      if (websocket) {
+        websocket.send(JSON.stringify({
+          event: 'setGlobalSettings',
+          context: uuid,
+          payload: { serverUrl: this.value }
+        }));
+      }
+    });
+  </script>
+</body>
+</html>

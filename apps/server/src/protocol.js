@@ -1,0 +1,41 @@
+export const MSG = {
+  // Agent -> Server
+  AGENT_HELLO: 'agent:hello',
+  AGENT_FRAME: 'agent:frame',
+  AGENT_LAP_COMPLETE: 'agent:lapComplete',
+  AGENT_SESSION_INFO: 'agent:sessionInfo',
+  AGENT_STANDINGS: 'agent:standings',
+
+  // Server -> Viewer
+  SESSION_SNAPSHOT: 'session:snapshot',
+  DRIVER_JOINED: 'driver:joined',
+  DRIVER_LEFT: 'driver:left',
+  TELEMETRY_FRAME: 'telemetry:frame',
+  LAP_COMPLETE: 'lap:complete',
+  LAP_TRACE: 'lap:trace',
+  LAP_LIST: 'lap:list',
+  STINT_COMPLETE: 'stint:complete',
+  STINT_LIST: 'stint:list',
+  TRACK_SHAPE: 'track:shape',
+  STANDINGS: 'standings',
+
+  // Viewer -> Server
+  SUBSCRIBE: 'subscribe',
+  SUBSCRIBE_ALL: 'subscribe:all',
+  REQUEST_LAP_TRACE: 'request:lapTrace',
+  REQUEST_LAP_LIST: 'request:lapList',
+  REQUEST_STINTS: 'request:stints',
+  EVENT: 'event',
+  EVENT_LOG: 'event:log',
+  REQUEST_PROFILE: 'request:profile',
+  PROFILE: 'profile',
+  PROFILE_UPDATED: 'profile:updated',
+  TEAM_LIST: 'team:list',
+  SWITCH_TEAM: 'switch:team',
+  SAVE_PLAN: 'plan:save',
+  LOAD_PLAN: 'plan:load',
+  DELETE_PLAN: 'plan:delete',
+  LIST_PLANS: 'plan:list',
+  PLAN_LIST: 'plan:listResponse',
+  PLAN_DATA: 'plan:data',
+};
