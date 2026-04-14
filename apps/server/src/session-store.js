@@ -12,12 +12,12 @@ const BLUE_FLAG_PROXIMITY = 0.05;
 // Blue flag violation: held up for more than 8 seconds
 const BLUE_FLAG_VIOLATION_SECONDS = 8;
 
-// Contact detection: lat-G spike threshold (g-force)
-const CONTACT_LAT_G_THRESHOLD = 1.8;
-// Two cars must be within 2% track distance to be "close enough" for contact
-const CONTACT_PROXIMITY = 0.02;
-// Cooldown per pair: don't re-detect the same pair within 10 seconds
-const CONTACT_COOLDOWN_SECONDS = 10;
+// Contact detection: lat-G spike threshold (g-force) — must be a genuine impact
+const CONTACT_LAT_G_THRESHOLD = 2.5;
+// Two cars must be within 0.5% track distance to be "close enough" for contact
+const CONTACT_PROXIMITY = 0.005;
+// Cooldown per pair: don't re-detect the same pair within 30 seconds
+const CONTACT_COOLDOWN_SECONDS = 30;
 
 class SessionStore {
   constructor() {

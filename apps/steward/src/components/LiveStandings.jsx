@@ -145,6 +145,7 @@ export function LiveStandings({ standings, incidents, onDriverClick }) {
             <tr>
               <th style={{ ...styles.th, width: '30px', textAlign: 'center' }}>Pos</th>
               <th style={{ ...styles.th, width: '40px', textAlign: 'center' }}>#</th>
+              <th style={{ ...styles.th, width: '42px', textAlign: 'center' }}>Class</th>
               <th style={styles.th}>Driver</th>
               <th style={{ ...styles.th, ...styles.thCenter }}>Laps</th>
               <th style={{ ...styles.th, ...styles.thRight }}>Interval</th>
@@ -196,6 +197,17 @@ export function LiveStandings({ standings, incidents, onDriverClick }) {
                     fontWeight: 600,
                   }}>
                     {s.carNum}
+                  </td>
+
+                  {/* Class */}
+                  <td style={{
+                    ...styles.td,
+                    textAlign: 'center',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    color: s.carClass === 'LMP2' ? '#ef4444' : '#f59e0b',
+                  }}>
+                    {s.carClass || 'GT3'}
                   </td>
 
                   {/* Driver name */}

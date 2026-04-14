@@ -98,6 +98,7 @@ export function BroadcastStandings() {
             <tr>
               <th style={{ ...styles.th, textAlign: 'center', width: '28px' }}>P</th>
               <th style={{ ...styles.th, textAlign: 'center', width: '32px' }}>#</th>
+              <th style={{ ...styles.th, textAlign: 'center', width: '36px' }}>Class</th>
               <th style={styles.th}>Driver</th>
               <th style={{ ...styles.th, textAlign: 'center' }}>Laps</th>
               <th style={{ ...styles.th, textAlign: 'right' }}>Int</th>
@@ -120,6 +121,7 @@ export function BroadcastStandings() {
                 }}>
                   <td style={{ ...styles.td, textAlign: 'center', fontWeight: 700, color: s.pos === 1 ? '#f59e0b' : s.pos <= 3 ? '#ccc' : '#666' }}>{s.pos}</td>
                   <td style={{ ...styles.td, textAlign: 'center', color: '#555', fontWeight: 600 }}>{s.carNum}</td>
+                  <td style={{ ...styles.td, textAlign: 'center', fontSize: '9px', fontWeight: 700, color: s.carClass === 'LMP2' ? '#ef4444' : '#f59e0b' }}>{s.carClass || 'GT3'}</td>
                   <td style={{ ...styles.td, fontWeight: 600, color: '#ccc', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</td>
                   <td style={{ ...styles.td, textAlign: 'center', color: '#666' }}>{s.lapsCompleted}</td>
                   <td style={{ ...styles.td, textAlign: 'right', color: s.pos === 1 ? '#444' : '#ccc', fontSize: '11px' }}>{s.pos === 1 ? '' : formatInterval(s.interval)}</td>

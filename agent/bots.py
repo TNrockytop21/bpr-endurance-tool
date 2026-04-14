@@ -145,7 +145,8 @@ class BotDriver:
         base = driver_info["baseLap"]
         self._lap_duration = base + random.uniform(-1, 3) * (1 - self.skill)
 
-        self._next_incident_time = self.t + random.uniform(40, 120) * (1 - self.aggression + 0.3)
+        # Realistic incident timing: clean drivers ~1 per 20-30 min, aggressive ~1 per 5-10 min
+        self._next_incident_time = self.t + random.uniform(300, 1800) * (1.2 - self.aggression)
         self._contact_active = False
         self._contact_end_time = 0
 
@@ -219,14 +220,19 @@ class BotDriver:
         if self.car_class == 'LMP2':
             lat_g *= 1.15
 
-        # Random incidents
+        # Random incidents — realistic frequency
+        # Clean drivers: incident every ~20-30 min. Aggressive: every ~5-10 min.
         if self.t >= self._next_incident_time:
-            if random.random() < self.aggression:
-                delta = random.choice([2, 2, 4])
+            # Mostly 1x off-tracks, occasional 2x contact, rare 4x
+            roll = random.random()
+            if roll < 0.60:
+                delta = 1  # off-track
+            elif roll < 0.90:
+                delta = 2  # contact
             else:
-                delta = 1
+                delta = 4  # heavy contact
             self._incident_count += delta
-            self._next_incident_time = self.t + random.uniform(30, 100) * (1.3 - self.aggression)
+            self._next_incident_time = self.t + random.uniform(300, 1800) * (1.2 - self.aggression)
             if delta >= 2:
                 self._contact_active = True
                 self._contact_end_time = self.t + 0.5
@@ -318,6 +324,7 @@ class BotDriver:
                 "onPitRoad": d.get("onPit", False),
                 "interval": round(max(0, interval), 1),
                 "gap": round(max(0, gap), 1),
+                "carClass": d.get("class", "GT3"),
             })
         return standings
 
@@ -326,7 +333,7 @@ async def run_bot(server_url, bot, all_bots):
     """Run one bot driver as a websocket agent."""
     while True:
         try:
-            async with websockets.connect(server_url) as ws:
+            async with websockets.connect(server_url, open_timeout=30) as ws:
                 print(f"[{bot.car_class}] {bot.name} connected — {bot.car}")
                 await ws.send(hello_message(bot.name, bot.car, 237, "Sebring International Raceway"))
 
@@ -383,8 +390,17 @@ async def main(server_url, gt3_count, lmp2_count):
         print(f"  {bot.info['carNum']:>3}  {bot.name:<20} {bot.car:<28} {bot.car_class:<5} {bot.skill:>5.2f}  {bot.aggression:>5.2f}")
     print()
 
-    tasks = [asyncio.create_task(run_bot(server_url, bot, bots)) for bot in bots]
+    # Stagger connections — 0.5s apart to avoid overwhelming the server
+    tasks = []
+    for i, bot in enumerate(bots):
+        tasks.append(asyncio.create_task(run_bot_delayed(server_url, bot, bots, i * 0.5)))
     await asyncio.gather(*tasks)
+
+
+async def run_bot_delayed(server_url, bot, all_bots, delay):
+    """Wait then start the bot."""
+    await asyncio.sleep(delay)
+    await run_bot(server_url, bot, all_bots)
 
 
 if __name__ == "__main__":
