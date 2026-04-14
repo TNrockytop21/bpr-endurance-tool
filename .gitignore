@@ -4,3 +4,6 @@ dist/
 *.pyc
 __pycache__/
 .venv/
+data/sessions/
+data/profiles/
+.claude/

@@ -20,10 +20,11 @@ function CustomDot(props) {
   return <Dot cx={cx} cy={cy} r={3} fill="#8b5cf6" />;
 }
 
-export function LapTimeTrendChart({ driverId }) {
+export function LapTimeTrendChart({ driverId, laps: lapsProp, bestLapTime: bestLapTimeProp }) {
   const { drivers } = useSession();
-  const driver = drivers[driverId];
-  const laps = driver?.laps || [];
+  const sessionDriver = drivers[driverId];
+  const laps = lapsProp ?? sessionDriver?.laps ?? [];
+  const bestLapTime = bestLapTimeProp ?? sessionDriver?.bestLapTime ?? null;
 
   if (laps.length < 2) return null;
 
@@ -65,9 +66,9 @@ export function LapTimeTrendChart({ driverId }) {
             }}
             formatter={(value) => [formatLapTime(value), 'Lap Time']}
           />
-          {driver.bestLapTime && (
+          {bestLapTime && (
             <ReferenceLine
-              y={driver.bestLapTime}
+              y={bestLapTime}
               stroke="#8b5cf6"
               strokeDasharray="4 4"
               strokeWidth={1}

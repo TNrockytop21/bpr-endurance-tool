@@ -8,7 +8,7 @@ export function TelemetryProvider({ children }) {
   const buffersRef = useRef(new Map());
 
   useEffect(() => {
-    const unsub = wsClient.on('telemetry:frame', (payload) => {
+    const unsubFrame = wsClient.on('telemetry:frame', (payload) => {
       const { driverId, ...frame } = payload;
       if (!buffersRef.current.has(driverId)) {
         buffersRef.current.set(driverId, new TelemetryBuffer());
@@ -16,7 +16,9 @@ export function TelemetryProvider({ children }) {
       buffersRef.current.get(driverId).push(frame);
     });
 
-    return unsub;
+    return () => {
+      unsubFrame();
+    };
   }, []);
 
   return (

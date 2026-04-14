@@ -3,7 +3,9 @@ import { DriverCard } from './DriverCard';
 
 export function DriverGrid() {
   const { drivers } = useSession();
-  const driverList = Object.values(drivers);
+  // Only show currently-connected drivers. Disconnected entries remain in
+  // state for history/detail pages but shouldn't clutter the live grid.
+  const driverList = Object.values(drivers).filter((d) => d.connected);
 
   if (driverList.length === 0) {
     return (

@@ -14,8 +14,6 @@ const initialState = {
   events: [],
   profiles: {},
   standings: [],
-  teams: [],
-  currentTeam: null,
 };
 
 function sessionReducer(state, action) {
@@ -62,8 +60,16 @@ function sessionReducer(state, action) {
     }
 
     case 'DRIVER_LEFT': {
-      const { driverId } = action.payload;
+      const { driverId, replaced } = action.payload;
       if (!state.drivers[driverId]) return state;
+      if (replaced) {
+        const { [driverId]: _removed, ...remainingDrivers } = state.drivers;
+        return {
+          ...state,
+          drivers: remainingDrivers,
+          driverJoinOrder: state.driverJoinOrder.filter((id) => id !== driverId),
+        };
+      }
       return {
         ...state,
         drivers: {
@@ -136,23 +142,6 @@ function sessionReducer(state, action) {
     case 'STANDINGS':
       return { ...state, standings: action.payload };
 
-    case 'TEAM_LIST':
-      return {
-        ...state,
-        teams: action.payload.teams || [],
-        currentTeam: action.payload.currentTeam || state.currentTeam,
-      };
-
-    case 'SWITCH_TEAM': {
-      // Clear all data when switching teams (server will send new snapshot)
-      return {
-        ...initialState,
-        connected: state.connected,
-        teams: state.teams,
-        currentTeam: action.payload.team,
-      };
-    }
-
     default:
       return state;
   }
@@ -169,21 +158,19 @@ export function SessionProvider({ children }) {
     return null;
   }, [state.drivers, state.driverJoinOrder]);
 
-  const switchTeam = useCallback((team) => {
-    dispatch({ type: 'SWITCH_TEAM', payload: { team } });
-    wsClient.send('switch:team', { team });
-  }, []);
-
   const value = useMemo(
-    () => ({ ...state, activeDriverId, switchTeam }),
-    [state, activeDriverId, switchTeam]
+    () => ({
+      ...state,
+      activeDriverId,
+    }),
+    [state, activeDriverId]
   );
 
   useEffect(() => {
     const unsubs = [
-      wsClient.on('_connected', (connected) =>
-        dispatch({ type: 'SET_CONNECTED', payload: connected })
-      ),
+      wsClient.on('_connected', (connected) => {
+        dispatch({ type: 'SET_CONNECTED', payload: connected });
+      }),
       wsClient.on('session:snapshot', (payload) =>
         dispatch({ type: 'SESSION_SNAPSHOT', payload })
       ),
@@ -222,9 +209,6 @@ export function SessionProvider({ children }) {
       ),
       wsClient.on('standings', (payload) =>
         dispatch({ type: 'STANDINGS', payload })
-      ),
-      wsClient.on('team:list', (payload) =>
-        dispatch({ type: 'TEAM_LIST', payload })
       ),
     ];
 

@@ -22,35 +22,8 @@ def read_frame(ir):
         "sessionTimeRemain": ir["SessionTimeRemain"],
     }
 
-    # Tire temps (left/mid/right for each corner) - degrees C
-    for corner, prefix in [("LF", "LF"), ("RF", "RF"), ("LR", "LR"), ("RR", "RR")]:
-        try:
-            frame[f"tire{corner}tempL"] = ir[f"{prefix}tempCL"]
-            frame[f"tire{corner}tempM"] = ir[f"{prefix}tempCM"]
-            frame[f"tire{corner}tempR"] = ir[f"{prefix}tempCR"]
-        except Exception:
-            pass
-
-    # Tire wear (0-1, 1 = new)
-    for corner, prefix in [("LF", "LF"), ("RF", "RF"), ("LR", "LR"), ("RR", "RR")]:
-        try:
-            frame[f"tire{corner}wear"] = ir[f"{prefix}wear"]
-        except Exception:
-            pass
-
-    # Brake temps - degrees C
-    for corner, prefix in [("LF", "LF"), ("RF", "RF"), ("LR", "LR"), ("RR", "RR")]:
-        try:
-            frame[f"brake{corner}temp"] = ir[f"{prefix}brakeTemp"]
-        except Exception:
-            pass
-
-    # Shock/suspension deflection - meters
-    for corner, prefix in [("LF", "LF"), ("RF", "RF"), ("LR", "LR"), ("RR", "RR")]:
-        try:
-            frame[f"shock{corner}defl"] = ir[f"{prefix}shockDefl"]
-        except Exception:
-            pass
+    # NOTE: Tire temps, wear, brake temps, and shock data are restricted by
+    # iRacing's API and not reliably available, so we don't capture them.
 
     # Engine / Drivetrain
     try:

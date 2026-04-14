@@ -249,29 +249,6 @@ class MockIRacing:
             "position": 1,
             "sessionTime": self.t,
             "sessionTimeRemain": 43200 - self.t,  # 12hr race
-            # Tire temps
-            "tireLFtempL": 85 + self.lap * 0.2 + brake * 12 + abs(self._steer) * 0.1 + random.uniform(-1, 1),
-            "tireLFtempM": 90 + self.lap * 0.2 + brake * 15 + random.uniform(-1, 1),
-            "tireLFtempR": 87 + self.lap * 0.2 + brake * 10 + abs(self._steer) * 0.15 + random.uniform(-1, 1),
-            "tireRFtempL": 84 + self.lap * 0.2 + brake * 11 + abs(self._steer) * 0.12 + random.uniform(-1, 1),
-            "tireRFtempM": 89 + self.lap * 0.2 + brake * 14 + random.uniform(-1, 1),
-            "tireRFtempR": 86 + self.lap * 0.2 + brake * 9 + abs(self._steer) * 0.13 + random.uniform(-1, 1),
-            "tireLRtempL": 80 + self.lap * 0.15 + throttle * 6 + random.uniform(-1, 1),
-            "tireLRtempM": 83 + self.lap * 0.15 + throttle * 8 + random.uniform(-1, 1),
-            "tireLRtempR": 81 + self.lap * 0.15 + throttle * 5 + random.uniform(-1, 1),
-            "tireRRtempL": 79 + self.lap * 0.15 + throttle * 7 + random.uniform(-1, 1),
-            "tireRRtempM": 84 + self.lap * 0.15 + throttle * 9 + random.uniform(-1, 1),
-            "tireRRtempR": 80 + self.lap * 0.15 + throttle * 6 + random.uniform(-1, 1),
-            # Tire wear
-            "tireLFwear": max(0, 1.0 - self.lap * 0.006 + random.uniform(-0.001, 0.001)),
-            "tireRFwear": max(0, 1.0 - self.lap * 0.007 + random.uniform(-0.001, 0.001)),
-            "tireLRwear": max(0, 1.0 - self.lap * 0.004 + random.uniform(-0.001, 0.001)),
-            "tireRRwear": max(0, 1.0 - self.lap * 0.005 + random.uniform(-0.001, 0.001)),
-            # Brake temps
-            "brakeLFtemp": 380 + brake * 350 + random.uniform(-15, 15),
-            "brakeRFtemp": 375 + brake * 360 + random.uniform(-15, 15),
-            "brakeLRtemp": 300 + brake * 250 + random.uniform(-10, 10),
-            "brakeRRtemp": 295 + brake * 260 + random.uniform(-10, 10),
             # Engine
             "waterTemp": 85 + throttle * 6 + random.uniform(-0.3, 0.3),
             "oilTemp": 100 + throttle * 10 + random.uniform(-0.3, 0.3),
@@ -290,6 +267,46 @@ class MockIRacing:
 # ---------------------------------------------------------------------------
 # Main agent loop
 # ---------------------------------------------------------------------------
+
+async def _listen_server(ws):
+    """Listen for incoming server messages (penalties, race control)."""
+    try:
+        async for raw in ws:
+            try:
+                msg = json.loads(raw)
+            except Exception:
+                continue
+            msg_type = msg.get("type", "")
+            payload = msg.get("payload", {})
+
+            if msg_type == "server:penalty":
+                penalty_type = payload.get("type", "unknown")
+                time_sec = payload.get("timeSeconds")
+                notes = payload.get("notes", "")
+                label = penalty_type.upper().replace("-", " ")
+                if time_sec and penalty_type == "time-penalty":
+                    label = f"TIME PENALTY — {time_sec}s"
+                print(f"\n{'='*50}")
+                print(f"  RACE CONTROL: {label}")
+                if notes:
+                    print(f"  Note: {notes}")
+                print(f"{'='*50}\n")
+            elif msg_type == "server:underInvestigation":
+                notes = payload.get("notes", "")
+                print(f"\n{'='*50}")
+                print(f"  RACE CONTROL: INCIDENT UNDER INVESTIGATION")
+                if notes:
+                    print(f"  Note: {notes}")
+                print(f"{'='*50}\n")
+            elif msg_type == "server:protestAck":
+                print(f"\n  [RC] {payload.get('message', 'Protest received')}\n")
+            elif msg_type == "server:message":
+                print(f"\n  [RC] {payload.get('message', '')}\n")
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
+
 
 async def run_agent(server_url, driver_name, use_mock=False):
     while True:
@@ -325,6 +342,9 @@ async def run_agent(server_url, driver_name, use_mock=False):
 
                 # Send hello
                 await ws.send(hello_message(driver_name, car, track_id, track_name))
+
+                # Listen for server messages (penalties, race control)
+                listen_task = asyncio.create_task(_listen_server(ws))
 
                 interval = 1.0 / SEND_RATE_HZ
                 frame_count = 0
@@ -366,6 +386,8 @@ async def run_agent(server_url, driver_name, use_mock=False):
                     sleep_time = max(0, interval - elapsed)
                     await asyncio.sleep(sleep_time)
 
+                listen_task.cancel()
+
         except (websockets.ConnectionClosed, ConnectionRefusedError, OSError) as e:
             print(f"Connection lost ({e}). Reconnecting in 3s...")
             await asyncio.sleep(3)
@@ -375,23 +397,16 @@ def main():
     parser = argparse.ArgumentParser(description="iRacing Telemetry Agent")
     parser.add_argument("--server", default=SERVER_URL, help="WebSocket server URL")
     parser.add_argument("--name", default=DRIVER_NAME, help="Driver name")
-    parser.add_argument("--team", default="Team A", help="Team name (Team A, Team B, etc.)")
     parser.add_argument("--mock", action="store_true", help="Use mock telemetry data")
     args = parser.parse_args()
 
-    # Append team as query param to server URL
-    from urllib.parse import quote
-    sep = '&' if '?' in args.server else '?'
-    server_url = f"{args.server}{sep}team={quote(args.team)}"
-
     print(f"iRacing Telemetry Agent")
-    print(f"  Server: {server_url}")
+    print(f"  Server: {args.server}")
     print(f"  Driver: {args.name}")
-    print(f"  Team:   {args.team}")
     print(f"  Mode:   {'Mock' if args.mock else 'iRacing'}")
     print()
 
-    asyncio.run(run_agent(server_url, args.name, args.mock))
+    asyncio.run(run_agent(args.server, args.name, args.mock))
 
 
 if __name__ == "__main__":

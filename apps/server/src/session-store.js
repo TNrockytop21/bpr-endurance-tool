@@ -2,6 +2,23 @@ import { saveProfile } from './profiles.js';
 
 const NUM_DISTANCE_BINS = 1000;
 
+// Ring buffer: 120 seconds at 20 Hz = 2400 frames per driver (~500 KB max)
+const RAW_BUFFER_SECONDS = 120;
+const RAW_BUFFER_HZ = 20;
+const RAW_BUFFER_CAPACITY = RAW_BUFFER_SECONDS * RAW_BUFFER_HZ;
+
+// Blue flag: lapping car within 5% of track distance behind a slower car
+const BLUE_FLAG_PROXIMITY = 0.05;
+// Blue flag violation: held up for more than 8 seconds
+const BLUE_FLAG_VIOLATION_SECONDS = 8;
+
+// Contact detection: lat-G spike threshold (g-force)
+const CONTACT_LAT_G_THRESHOLD = 1.8;
+// Two cars must be within 2% track distance to be "close enough" for contact
+const CONTACT_PROXIMITY = 0.02;
+// Cooldown per pair: don't re-detect the same pair within 10 seconds
+const CONTACT_COOLDOWN_SECONDS = 10;
+
 class SessionStore {
   constructor() {
     this.sessionInfo = null;
@@ -11,6 +28,14 @@ class SessionStore {
     this.trackShape = null;
     this.eventLog = [];
     this._eventId = 0;
+    // Blue flag tracking: key = "slowId::fastId", value = first-detected sessionTime
+    this._blueFlagPairs = new Map();
+    // Cooldown: don't re-flag the same pair within 60 seconds
+    this._blueFlagCooldowns = new Map();
+    // Contact detection cooldowns: key = "driverA::driverB" (sorted), value = expiry sessionTime
+    this._contactCooldowns = new Map();
+    // Pending penalties awaiting serving: driverId -> { type, issuedAt }
+    this._pendingPenalties = new Map();
   }
 
   setSessionInfo(info) {
@@ -18,6 +43,18 @@ class SessionStore {
   }
 
   addDriver(id, { name, car }) {
+    // Reconnect dedupe: if a disconnected driver with the same name exists,
+    // remove it so ghost entries don't accumulate across reconnects.
+    // Returns the removed ghost's id (if any) so the caller can broadcast
+    // a DRIVER_LEFT for it before the new DRIVER_JOINED.
+    let removedGhostId = null;
+    for (const [existingId, driver] of this.drivers) {
+      if (!driver.connected && driver.name === name) {
+        this.drivers.delete(existingId);
+        removedGhostId = existingId;
+        break;
+      }
+    }
     this.drivers.set(id, {
       id,
       name,
@@ -32,7 +69,14 @@ class SessionStore {
       bestSectors: [null, null, null],
       stintStartTime: Date.now(),
       stintStartLap: null,
+      // Raw-frame ring buffer for incident review (120s at 20Hz)
+      rawFrames: new Array(RAW_BUFFER_CAPACITY),
+      rawFrameHead: 0,
+      rawFrameCount: 0,
+      // Incident tracking (cumulative iRacing incident count)
+      lastIncidentCount: null,
     });
+    return removedGhostId;
   }
 
   removeDriver(id) {
@@ -91,6 +135,31 @@ class SessionStore {
     driver.lastFrame = frame;
     if (driver.stintStartLap === null) driver.stintStartLap = frame.lap;
 
+    // Push into raw-frame ring buffer
+    driver.rawFrames[driver.rawFrameHead] = frame;
+    driver.rawFrameHead = (driver.rawFrameHead + 1) % RAW_BUFFER_CAPACITY;
+    if (driver.rawFrameCount < RAW_BUFFER_CAPACITY) driver.rawFrameCount++;
+
+    // Detect incident count increment
+    let incidentDelta = null;
+    if (frame.incidents != null) {
+      const current = frame.incidents;
+      if (driver.lastIncidentCount !== null && current > driver.lastIncidentCount) {
+        incidentDelta = {
+          driverId,
+          driverName: driver.name,
+          previousCount: driver.lastIncidentCount,
+          newCount: current,
+          delta: current - driver.lastIncidentCount,
+          sessionTime: frame.sessionTime,
+          lap: frame.lap,
+          lapDist: frame.lapDist,
+          speed: frame.speed,
+        };
+      }
+      driver.lastIncidentCount = current;
+    }
+
     const prevLap = driver.currentLapNumber;
     const newLap = frame.lap;
     let completedLap = null;
@@ -102,7 +171,7 @@ class SessionStore {
     driver.currentLapNumber = newLap;
     driver.currentLapSamples.push({ ...frame });
 
-    return completedLap;
+    return { completedLap, incidentDelta };
   }
 
   _computeSectors(samples) {
@@ -282,6 +351,243 @@ class SessionStore {
     return bins;
   }
 
+  /**
+   * Return raw frames for a driver within [startTime, endTime] (sessionTime).
+   * Returns an array sorted by sessionTime ascending.
+   */
+  /**
+   * Check for blue flag violations across all connected drivers.
+   * Called after every frame update. Returns an array of violations
+   * detected this tick (usually empty).
+   *
+   * A violation fires when a lapping car (more laps completed) has
+   * been within BLUE_FLAG_PROXIMITY of a slower car's lapDist for
+   * longer than BLUE_FLAG_VIOLATION_SECONDS continuously.
+   */
+  checkBlueFlagViolations(sessionTime) {
+    const violations = [];
+    const connectedDrivers = [];
+
+    for (const [id, driver] of this.drivers) {
+      if (!driver.connected || !driver.lastFrame) continue;
+      connectedDrivers.push({
+        id,
+        name: driver.name,
+        lap: driver.lastFrame.lap,
+        lapDist: driver.lastFrame.lapDist,
+        sessionTime: driver.lastFrame.sessionTime,
+      });
+    }
+
+    // Check all pairs
+    const activePairs = new Set();
+    for (let i = 0; i < connectedDrivers.length; i++) {
+      for (let j = i + 1; j < connectedDrivers.length; j++) {
+        const a = connectedDrivers[i];
+        const b = connectedDrivers[j];
+
+        // Determine who's lapping whom
+        let faster, slower;
+        if (a.lap > b.lap) {
+          faster = a; slower = b;
+        } else if (b.lap > a.lap) {
+          faster = b; slower = a;
+        } else {
+          continue; // same lap — no blue flag
+        }
+
+        // Check proximity (track distance wraps at 0/1)
+        let dist = Math.abs(faster.lapDist - slower.lapDist);
+        if (dist > 0.5) dist = 1 - dist; // wrap-around
+
+        const pairKey = `${slower.id}::${faster.id}`;
+
+        if (dist <= BLUE_FLAG_PROXIMITY) {
+          activePairs.add(pairKey);
+
+          if (!this._blueFlagPairs.has(pairKey)) {
+            this._blueFlagPairs.set(pairKey, sessionTime);
+          } else {
+            const startTime = this._blueFlagPairs.get(pairKey);
+            const duration = sessionTime - startTime;
+            const cooldownUntil = this._blueFlagCooldowns.get(pairKey) || 0;
+
+            if (duration >= BLUE_FLAG_VIOLATION_SECONDS && sessionTime > cooldownUntil) {
+              violations.push({
+                slowDriverId: slower.id,
+                slowDriverName: slower.name,
+                fastDriverId: faster.id,
+                fastDriverName: faster.name,
+                duration: Math.round(duration),
+                sessionTime,
+                lap: slower.lap,
+                lapDist: slower.lapDist,
+              });
+              // Set cooldown — don't re-flag this pair for 60 seconds
+              this._blueFlagCooldowns.set(pairKey, sessionTime + 60);
+              this._blueFlagPairs.delete(pairKey);
+            }
+          }
+        }
+      }
+    }
+
+    // Clear pairs that are no longer in proximity
+    for (const key of this._blueFlagPairs.keys()) {
+      if (!activePairs.has(key)) {
+        this._blueFlagPairs.delete(key);
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Detect probable contact between cars.
+   * Looks for two connected drivers that are both experiencing high lat-G
+   * and are within close proximity on track simultaneously.
+   */
+  /**
+   * Register a penalty that requires pit-lane serving (drive-through or stop-go).
+   */
+  addPendingPenalty(driverId, penaltyType) {
+    if (penaltyType === 'drive-through' || penaltyType === 'stop-go') {
+      this._pendingPenalties.set(driverId, {
+        type: penaltyType,
+        issuedAt: Date.now(),
+        wasOnPitRoad: false,
+      });
+    }
+  }
+
+  /**
+   * Check if any pending penalties have been served.
+   * A drive-through is served when the driver enters and exits pit road.
+   * A stop-go is served when the driver enters pit road and speed drops to ~0.
+   * Returns an array of served penalties.
+   */
+  checkPenaltyServing() {
+    const served = [];
+
+    for (const [driverId, pending] of this._pendingPenalties) {
+      const driver = this.drivers.get(driverId);
+      if (!driver || !driver.lastFrame) continue;
+
+      const onPit = driver.lastFrame.onPitRoad;
+      const speed = driver.lastFrame.speed || 0;
+
+      if (pending.type === 'drive-through') {
+        if (onPit && !pending.wasOnPitRoad) {
+          pending.wasOnPitRoad = true;
+        }
+        if (pending.wasOnPitRoad && !onPit) {
+          // Exited pit road — drive-through served
+          served.push({
+            driverId,
+            driverName: driver.name,
+            penaltyType: pending.type,
+            servedAt: Date.now(),
+            sessionTime: driver.lastFrame.sessionTime,
+          });
+          this._pendingPenalties.delete(driverId);
+        }
+      } else if (pending.type === 'stop-go') {
+        if (onPit && speed < 1) {
+          // Stopped in pit — stop-go served
+          if (!pending.stopped) {
+            pending.stopped = true;
+          }
+        }
+        if (pending.stopped && !onPit) {
+          served.push({
+            driverId,
+            driverName: driver.name,
+            penaltyType: pending.type,
+            servedAt: Date.now(),
+            sessionTime: driver.lastFrame.sessionTime,
+          });
+          this._pendingPenalties.delete(driverId);
+        }
+      }
+    }
+
+    return served;
+  }
+
+  checkContactDetection(sessionTime) {
+    const contacts = [];
+    const driversWithSpikes = [];
+
+    for (const [id, driver] of this.drivers) {
+      if (!driver.connected || !driver.lastFrame) continue;
+      const absLatG = Math.abs(driver.lastFrame.latG || 0);
+      if (absLatG >= CONTACT_LAT_G_THRESHOLD) {
+        driversWithSpikes.push({
+          id,
+          name: driver.name,
+          lapDist: driver.lastFrame.lapDist,
+          lap: driver.lastFrame.lap,
+          latG: driver.lastFrame.latG,
+          speed: driver.lastFrame.speed,
+        });
+      }
+    }
+
+    // Check pairs of spiking drivers for proximity
+    for (let i = 0; i < driversWithSpikes.length; i++) {
+      for (let j = i + 1; j < driversWithSpikes.length; j++) {
+        const a = driversWithSpikes[i];
+        const b = driversWithSpikes[j];
+
+        let dist = Math.abs(a.lapDist - b.lapDist);
+        if (dist > 0.5) dist = 1 - dist;
+
+        if (dist <= CONTACT_PROXIMITY) {
+          const pairKey = [a.id, b.id].sort().join('::');
+          const cooldownUntil = this._contactCooldowns.get(pairKey) || 0;
+
+          if (sessionTime > cooldownUntil) {
+            contacts.push({
+              driverAId: a.id,
+              driverAName: a.name,
+              driverBId: b.id,
+              driverBName: b.name,
+              sessionTime,
+              lap: a.lap,
+              lapDist: a.lapDist,
+              latGA: a.latG,
+              latGB: b.latG,
+            });
+            this._contactCooldowns.set(pairKey, sessionTime + CONTACT_COOLDOWN_SECONDS);
+          }
+        }
+      }
+    }
+
+    return contacts;
+  }
+
+  getRawFrames(driverId, startTime, endTime) {
+    const driver = this.drivers.get(driverId);
+    if (!driver || driver.rawFrameCount === 0) return [];
+
+    const result = [];
+    const count = driver.rawFrameCount;
+    // Oldest entry is at (head - count) wrapped
+    const start = (driver.rawFrameHead - count + RAW_BUFFER_CAPACITY) % RAW_BUFFER_CAPACITY;
+
+    for (let i = 0; i < count; i++) {
+      const idx = (start + i) % RAW_BUFFER_CAPACITY;
+      const frame = driver.rawFrames[idx];
+      if (!frame) continue;
+      const t = frame.sessionTime;
+      if (t >= startTime && t <= endTime) {
+        result.push(frame);
+      }
+    }
+    return result;
+  }
+
   getDriverSummary(driverId) {
     const d = this.drivers.get(driverId);
     if (!d) return null;
@@ -369,26 +675,4 @@ class SessionStore {
   }
 }
 
-class TeamManager {
-  constructor() {
-    this.teams = new Map();
-  }
-
-  getOrCreate(teamName) {
-    const name = teamName || 'Team A';
-    if (!this.teams.has(name)) {
-      this.teams.set(name, new SessionStore());
-      console.log(`[team] created: ${name}`);
-    }
-    return this.teams.get(name);
-  }
-
-  getTeamList() {
-    return [...this.teams.keys()];
-  }
-}
-
-export const teamManager = new TeamManager();
-
-// Backwards compat: default store for single-team usage
-export const store = teamManager.getOrCreate('Team A');
+export const store = new SessionStore();

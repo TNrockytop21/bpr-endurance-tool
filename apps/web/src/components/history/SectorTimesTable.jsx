@@ -6,13 +6,14 @@ function formatSector(seconds) {
   return seconds.toFixed(1);
 }
 
-export function SectorTimesTable({ driverId }) {
+export function SectorTimesTable({ driverId, laps: lapsProp, bestSectors: bestSectorsProp }) {
   const { drivers } = useSession();
-  const driver = drivers[driverId];
-  if (!driver) return null;
+  const sessionDriver = drivers[driverId];
+  const sourceLaps = lapsProp ?? sessionDriver?.laps ?? null;
+  if (sourceLaps === null) return null;
 
-  const laps = (driver.laps || []).filter((l) => l.sectors);
-  const bestSectors = driver.bestSectors || [null, null, null];
+  const laps = sourceLaps.filter((l) => l.sectors);
+  const bestSectors = bestSectorsProp ?? sessionDriver?.bestSectors ?? [null, null, null];
 
   if (laps.length === 0) return null;
 

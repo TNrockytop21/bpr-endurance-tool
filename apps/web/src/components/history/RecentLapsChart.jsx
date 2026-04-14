@@ -6,34 +6,54 @@ import { formatLapTime } from '../../lib/utils';
 
 const MAX_RECENT = 3;
 
-export function RecentLapsChart({ driverId }) {
+/**
+ * Recent laps chart. Accepts laps as a prop OR falls back to reading from
+ * session state for the active team. Accepts callbacks for requesting lap
+ * list / traces, falling back to standard team-scoped requests.
+ */
+export function RecentLapsChart({
+  driverId,
+  laps: lapsProp,
+  driverName: nameProp,
+  onRequestLapList,
+  onRequestLapTrace,
+}) {
   const { drivers } = useSession();
-  const driver = drivers[driverId];
+  const sessionDriver = drivers[driverId];
+  const laps = lapsProp ?? sessionDriver?.laps ?? [];
+  const driverName = nameProp ?? sessionDriver?.name ?? driverId;
   const [traces, setTraces] = useState([]);
 
   // Request lap list on mount (for laps completed before viewer connected)
   useEffect(() => {
     if (!driverId) return;
-    wsClient.send('request:lapList', { driverId });
-  }, [driverId]);
+    if (onRequestLapList) {
+      onRequestLapList();
+    } else {
+      wsClient.send('request:lapList', { driverId });
+    }
+  }, [driverId, onRequestLapList]);
 
   // Request traces when laps are available or new ones complete
   useEffect(() => {
-    if (!driver) return;
-    const validLaps = (driver.laps || []).filter((l) => l.valid);
+    const validLaps = laps.filter((l) => l.valid);
     const recent = validLaps.slice(-MAX_RECENT);
 
     for (const lap of recent) {
-      wsClient.send('request:lapTrace', { driverId, lapNumber: lap.lapNumber });
+      if (onRequestLapTrace) {
+        onRequestLapTrace(lap.lapNumber);
+      } else {
+        wsClient.send('request:lapTrace', { driverId, lapNumber: lap.lapNumber });
+      }
     }
-  }, [driverId, driver?.laps?.length]);
+  }, [driverId, laps.length, onRequestLapTrace]);
 
-  // Listen for trace responses
+  // Listen for trace responses (server replies on the same message type
+  // for both team-scoped and BPR-scoped requests)
   useEffect(() => {
     const unsub = wsClient.on('lap:trace', (payload) => {
       if (payload.driverId !== driverId || !payload.trace) return;
-      const driverName = drivers[driverId]?.name || driverId;
-      const lap = drivers[driverId]?.laps?.find((l) => l.lapNumber === payload.lapNumber);
+      const lap = laps.find((l) => l.lapNumber === payload.lapNumber);
       const timeStr = lap ? formatLapTime(lap.lapTime) : '';
       const label = `L${payload.lapNumber} ${timeStr}`;
 
@@ -45,16 +65,14 @@ export function RecentLapsChart({ driverId }) {
       });
     });
     return unsub;
-  }, [driverId, drivers]);
+  }, [driverId, laps]);
 
   // Reset traces when driver changes
   useEffect(() => {
     setTraces([]);
   }, [driverId]);
 
-  if (!driver) return null;
-
-  const validLaps = (driver.laps || []).filter((l) => l.valid);
+  const validLaps = laps.filter((l) => l.valid);
   if (validLaps.length === 0) {
     return (
       <div className="bg-surface-raised border border-border rounded-lg p-4">
