@@ -87,6 +87,10 @@ class MockIRacing:
         self._lap_duration = 120.0 + random.uniform(-2, 2)  # ~2:00 lap
         self._speed_mph = 80.0
         self._steer = 0.0
+        self._incident_count = 0
+        self._next_incident_time = random.uniform(30, 90)  # first incident after 30-90s
+        self._contact_active = False
+        self._contact_end_time = 0
         self._mock_drivers = [
             {"name": "D. Newman", "carNum": "1", "iRating": 3400, "baseLap": 120.98},
             {"name": "A. Riegel", "carNum": "2", "iRating": 2800, "baseLap": 121.23},
@@ -232,6 +236,25 @@ class MockIRacing:
         lat_g = (speed_ms ** 2) * math.sin(steer_rad * 0.02) * 0.15
         lon_g = -brake * 2.8 + throttle * 1.2
 
+        # Simulate random incidents (every 30-90 seconds)
+        if self.t >= self._next_incident_time:
+            incident_type = random.choice(['1x', '1x', '1x', '2x', '2x', '4x'])
+            delta = int(incident_type[0])
+            self._incident_count += delta
+            self._next_incident_time = self.t + random.uniform(30, 90)
+            # Trigger a contact event (high lat-G spike) for 2x/4x
+            if delta >= 2:
+                self._contact_active = True
+                self._contact_end_time = self.t + 0.5  # spike lasts 0.5s
+            print(f"  [mock] +{delta}x incident @ {self.t:.1f}s (total: {self._incident_count})")
+
+        # Apply contact lat-G spike
+        if self._contact_active:
+            lat_g = random.choice([-1, 1]) * random.uniform(2.0, 3.5)
+            self._steer += random.uniform(-30, 30)  # sudden steering correction
+            if self.t >= self._contact_end_time:
+                self._contact_active = False
+
         return {
             "lap": self.lap,
             "lapDist": self.lap_dist,
@@ -259,7 +282,7 @@ class MockIRacing:
             # Environment
             "airTemp": 28 + random.uniform(-0.1, 0.1),
             "trackTemp": 38 + random.uniform(-0.2, 0.2),
-            "incidents": 0,
+            "incidents": self._incident_count,
             "lapDeltaToBest": random.uniform(-1.0, 1.5),
         }
 

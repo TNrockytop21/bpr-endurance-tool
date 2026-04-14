@@ -1,12 +1,18 @@
 {
   "name": "bpr-steward",
   "version": "0.1.0",
+  "description": "BPR Race Control — Steward Application",
+  "author": "Bite Point Racing",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite --port 5179 --strictPort\" \"wait-on http://localhost:5179 && cross-env VITE_DEV_URL=http://localhost:5179 electron .\"",
     "build": "vite build",
-    "preview": "electron ."
+    "preview": "electron .",
+    "pack": "vite build && electron-builder --win --dir",
+    "pack:mac": "vite build && electron-builder --mac --dir",
+    "dist": "vite build && electron-builder --win",
+    "dist:mac": "vite build && electron-builder --mac"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -16,8 +22,32 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "electron": "^33.2.1",
+    "electron": "33.2.1",
+    "electron-builder": "^25.1.8",
     "vite": "^6.0.0",
     "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.bpr.racecontrol",
+    "productName": "BPR Race Control",
+    "directories": {
+      "output": "C:/temp/bpr-steward-build"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": null,
+      "signAndEditExecutable": false,
+      "signDlls": false
+    },
+    "mac": {
+      "target": "dir",
+      "icon": null,
+      "identity": null
+    },
+    "forceCodeSigning": false
   }
 }

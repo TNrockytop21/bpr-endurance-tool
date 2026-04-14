@@ -2,8 +2,8 @@ import { saveProfile } from './profiles.js';
 
 const NUM_DISTANCE_BINS = 1000;
 
-// Ring buffer: 120 seconds at 20 Hz = 2400 frames per driver (~500 KB max)
-const RAW_BUFFER_SECONDS = 120;
+// Ring buffer: 600 seconds (10 min) at 20 Hz = 12000 frames per driver (~2.5 MB max)
+const RAW_BUFFER_SECONDS = 600;
 const RAW_BUFFER_HZ = 20;
 const RAW_BUFFER_CAPACITY = RAW_BUFFER_SECONDS * RAW_BUFFER_HZ;
 
