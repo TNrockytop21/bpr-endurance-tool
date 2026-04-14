@@ -29,7 +29,7 @@ const styles = {
     borderRadius: '4px',
     display: 'flex',
     flexDirection: 'column',
-    minHeight: 0,
+    flexShrink: 0,
   },
   header: {
     display: 'flex',
@@ -73,10 +73,13 @@ const styles = {
   },
   chartsWrap: {
     flex: 1,
-    overflow: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
     padding: '8px 14px 14px',
+    overflow: 'hidden',
   },
   chartSection: {
+    flex: 1,
     marginBottom: '4px',
   },
   chartLabel: {
@@ -155,7 +158,7 @@ function TelemetryChart({ chartDef, timestamps, driverIds, seriesData, driverCol
 
     const el = containerRef.current;
     const width = el.clientWidth || 600;
-    const height = 120;
+    const height = Math.max(120, el.parentElement?.clientHeight - 20 || 200);
 
     // Build uPlot data: [timestamps, driver1_values, driver2_values, ...]
     const data = [timestamps];
@@ -218,7 +221,8 @@ function TelemetryChart({ chartDef, timestamps, driverIds, seriesData, driverCol
 
     const observer = new ResizeObserver(() => {
       if (plotRef.current && el.clientWidth > 0) {
-        plotRef.current.setSize({ width: el.clientWidth, height });
+        const newH = Math.max(120, el.parentElement?.clientHeight - 20 || 200);
+        plotRef.current.setSize({ width: el.clientWidth, height: newH });
       }
     });
     observer.observe(el);

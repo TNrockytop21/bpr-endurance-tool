@@ -5,7 +5,9 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '8px',
+    flex: 1,
+    minHeight: 0,
   },
   header: {
     fontSize: '10px',
@@ -73,8 +75,8 @@ const styles = {
   incidentList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    maxHeight: '300px',
+    gap: '4px',
+    flex: 1,
     overflow: 'auto',
   },
   incidentEntry: {
@@ -274,7 +276,7 @@ export function IncidentPanel({
           </div>
         ) : (
           <div style={styles.incidentList}>
-            {[...filteredIncidents].reverse().map((inc) => {
+            {filteredIncidents.map((inc) => {
               const cat = getIncidentCategory(inc);
               const catColor = FILTER_OPTIONS.find((o) => o.key === cat)?.color || '#888';
               return (

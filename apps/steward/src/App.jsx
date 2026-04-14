@@ -82,15 +82,12 @@ const styles = {
     flexDirection: 'column',
     overflow: 'hidden',
   },
-  sidebarTop: {
+  sidebarContent: {
     flex: 1,
     overflow: 'auto',
-    borderBottom: '1px solid #1a1a1a',
-  },
-  sidebarBottom: {
-    padding: '12px',
-    overflow: 'auto',
-    maxHeight: '50%',
+    padding: '8px 12px',
+    display: 'flex',
+    flexDirection: 'column',
   },
   main: {
     flex: 1,
@@ -98,11 +95,13 @@ const styles = {
     flexDirection: 'column',
     padding: '12px',
     minWidth: 0,
+    overflow: 'auto',
   },
 };
 
 export function App() {
   const [connected, setConnected] = useState(false);
+  const [driverDropdownOpen, setDriverDropdownOpen] = useState(false);
   const [drivers, setDrivers] = useState({});
   const [sessionInfo, setSessionInfo] = useState(null);
   const [trackShape, setTrackShape] = useState(null);
@@ -377,7 +376,10 @@ export function App() {
           break;
         case 'Tab':
           e.preventDefault();
-          setMainView((prev) => prev === 'telemetry' ? 'standings' : 'telemetry');
+          setMainView((prev) => {
+            const views = ['telemetry', 'standings', 'summary'];
+            return views[(views.indexOf(prev) + 1) % views.length];
+          });
           break;
       }
     };
@@ -421,26 +423,120 @@ export function App() {
       <div style={styles.body}>
         {/* Left sidebar: driver list + incident panel */}
         <div style={styles.sidebar}>
-          <div style={styles.sidebarTop}>
-            <DriverList
-              drivers={drivers}
-              selectedDriverIds={selectedDriverIds}
-              onToggleDriver={toggleDriver}
-            />
-          </div>
-          <div style={styles.sidebarBottom}>
-            <IncidentPanel
-              drivers={drivers}
-              selectedDriverIds={selectedDriverIds}
-              lastSessionTime={lastSessionTimeRef.current}
-              incidents={incidents}
-              incidentFilter={incidentFilter}
-              onFilterChange={setIncidentFilter}
-              onAddIncident={addIncident}
-              onReviewIncident={reviewIncident}
-            />
-            <div style={{ marginTop: '12px' }}>
+          <div style={styles.sidebarContent}>
+            {/* Driver selector — custom dropdown */}
+            <div style={{ marginBottom: '8px', flexShrink: 0, position: 'relative' }}>
+              <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Select Drivers ({selectedDriverIds.size} selected · {Object.values(drivers).filter(d => d.connected).length} online)
+              </div>
+              {/* Dropdown trigger */}
+              <button
+                onClick={() => setDriverDropdownOpen(!driverDropdownOpen)}
+                style={{
+                  width: '100%',
+                  padding: '5px 8px',
+                  background: '#1a1a1a',
+                  border: driverDropdownOpen ? '1px solid rgba(139,92,246,0.4)' : '1px solid #2a2a2a',
+                  borderRadius: '3px',
+                  color: selectedDriverIds.size > 0 ? '#a78bfa' : '#666',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span>{selectedDriverIds.size > 0
+                  ? [...selectedDriverIds].map(id => drivers[id]?.name || id).join(', ')
+                  : 'Click to select drivers...'
+                }</span>
+                <span style={{ color: '#555' }}>{driverDropdownOpen ? '▲' : '▼'}</span>
+              </button>
+              {/* Dropdown list */}
+              {driverDropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  zIndex: 100,
+                  background: '#141414',
+                  border: '1px solid #2a2a2a',
+                  borderRadius: '0 0 3px 3px',
+                  maxHeight: '250px',
+                  overflow: 'auto',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                }}>
+                  {Object.values(drivers).sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((driver) => {
+                    const selected = selectedDriverIds.has(driver.id);
+                    return (
+                      <div
+                        key={driver.id}
+                        onClick={() => { toggleDriver(driver.id); }}
+                        style={{
+                          padding: '5px 8px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: selected ? 'rgba(139,92,246,0.12)' : 'transparent',
+                          color: selected ? '#a78bfa' : driver.connected ? '#ccc' : '#555',
+                          borderBottom: '1px solid #1a1a1a',
+                        }}
+                        onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = '#1a1a1a'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = selected ? 'rgba(139,92,246,0.12)' : 'transparent'; }}
+                      >
+                        <div style={{
+                          width: '12px', height: '12px', borderRadius: '2px',
+                          border: selected ? '1px solid #a78bfa' : '1px solid #444',
+                          background: selected ? '#a78bfa' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '8px', color: 'white', fontWeight: 700,
+                          flexShrink: 0,
+                        }}>
+                          {selected ? '✓' : ''}
+                        </div>
+                        <span style={{ fontWeight: 600 }}>{driver.name}</span>
+                        <span style={{ color: '#555', fontSize: '10px' }}>{driver.car}</span>
+                      </div>
+                    );
+                  })}
+                  <div
+                    onClick={() => setDriverDropdownOpen(false)}
+                    style={{
+                      padding: '5px 8px',
+                      fontSize: '10px',
+                      color: '#666',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      borderTop: '1px solid #222',
+                    }}
+                  >
+                    Close
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* RC Messages — above incidents so it doesn't get buried */}
+            <div style={{ marginBottom: '8px', flexShrink: 0 }}>
               <RaceControlMessages drivers={drivers} />
+            </div>
+
+            {/* Incidents — takes remaining space */}
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <IncidentPanel
+                drivers={drivers}
+                selectedDriverIds={selectedDriverIds}
+                lastSessionTime={lastSessionTimeRef.current}
+                incidents={incidents}
+                incidentFilter={incidentFilter}
+                onFilterChange={setIncidentFilter}
+                onAddIncident={addIncident}
+                onReviewIncident={reviewIncident}
+              />
             </div>
           </div>
         </div>
@@ -452,6 +548,7 @@ export function App() {
             {[
               { id: 'telemetry', label: 'Telemetry' },
               { id: 'standings', label: 'Standings' },
+              { id: 'summary', label: 'Driver Summary' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -479,13 +576,6 @@ export function App() {
                 incidentData={incidentData}
                 drivers={drivers}
               />
-              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexShrink: 0 }}>
-                <div style={{ flex: 1 }} />
-                <div style={{ width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <TrackMap trackShape={trackShape} drivers={drivers} />
-                  <IncidentHeatmap trackShape={trackShape} incidents={incidents} />
-                </div>
-              </div>
               {reviewingIncident && (
                 <div style={{ marginTop: '8px', flexShrink: 0 }}>
                   <PenaltyPanel
@@ -501,13 +591,23 @@ export function App() {
 
           {/* Standings view */}
           {mainView === 'standings' && (
-            <LiveStandings
-              standings={standings}
-              incidents={incidents}
-              onDriverClick={(carIdx) => {
-                window.irsdk?.replayCamera(carIdx, 'chase');
-              }}
-            />
+            <>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginBottom: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <TrackMap trackShape={trackShape} drivers={drivers} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <IncidentHeatmap trackShape={trackShape} incidents={incidents} />
+                </div>
+              </div>
+              <LiveStandings
+                standings={standings}
+                incidents={incidents}
+                onDriverClick={(carIdx) => {
+                  window.irsdk?.replayCamera(carIdx, 'chase');
+                }}
+              />
+            </>
           )}
 
           {/* Replay controls — always visible, fixed position between content and bottom bar */}
@@ -515,24 +615,26 @@ export function App() {
             <ReplayControls irsdkConnected={false} drivers={drivers} />
           </div>
 
-          {/* Always visible bottom bar */}
-          <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexShrink: 0 }}>
-            <div style={{ flex: 1 }}>
-              <DriverSummaryPanel
-                drivers={drivers}
-                incidents={incidents}
-                penalties={penalties}
-              />
+          {/* Driver Summary view */}
+          {mainView === 'summary' && (
+            <div style={{ display: 'flex', gap: '8px', flex: 1, minHeight: 0 }}>
+              <div style={{ flex: 1 }}>
+                <DriverSummaryPanel
+                  drivers={drivers}
+                  incidents={incidents}
+                  penalties={penalties}
+                />
+              </div>
+              <div style={{ width: '200px', flexShrink: 0 }}>
+                <ReportExport
+                  sessionInfo={sessionInfo}
+                  drivers={drivers}
+                  incidents={incidents}
+                  penalties={penalties}
+                />
+              </div>
             </div>
-            <div style={{ width: '200px', flexShrink: 0 }}>
-              <ReportExport
-                sessionInfo={sessionInfo}
-                drivers={drivers}
-                incidents={incidents}
-                penalties={penalties}
-              />
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
